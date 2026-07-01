@@ -24,6 +24,9 @@ import cv2
 import numpy as np
 from deepface import DeepFace
 
+# OpenCV OpenCL causes intermittent CL_OUT_OF_RESOURCES failures on this setup.
+cv2.ocl.setUseOpenCL(False)
+
 
 EncodingDB = Dict[str, List]
 
@@ -95,10 +98,13 @@ def train(
                     print(f"  [warn] Cannot read {img_path.name}, skipping.")
                 continue
 
-            # Produce two variants: original + horizontal flip for augmentation
+            # Produce lighting and mirror variants so dim webcam frames still match.
+            bright = _boost_low_light(img_bgr)
             variants = [
                 ("orig", _preprocess(img_bgr)),
                 ("flip", _preprocess(cv2.flip(img_bgr, 1))),
+                ("bright", _preprocess(bright)),
+                ("bright_flip", _preprocess(cv2.flip(bright, 1))),
             ]
 
             for variant_name, processed in variants:
@@ -139,6 +145,20 @@ def _preprocess(bgr_img: np.ndarray) -> np.ndarray:
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
     ycrcb[:, :, 0] = clahe.apply(ycrcb[:, :, 0])
     return cv2.cvtColor(ycrcb, cv2.COLOR_YCrCb2BGR)
+
+
+def _boost_low_light(bgr_img: np.ndarray) -> np.ndarray:
+    """Brighten dark training images so encodings cover dim webcam conditions."""
+    hsv = cv2.cvtColor(bgr_img, cv2.COLOR_BGR2HSV).astype(np.float32)
+    value = hsv[:, :, 2]
+    mean_value = float(value.mean())
+    if mean_value >= 120:
+        return bgr_img
+
+    scale = 1.35 if mean_value >= 80 else 1.65
+    hsv[:, :, 2] = np.clip(value * scale, 0, 255)
+    boosted = cv2.cvtColor(hsv.astype(np.uint8), cv2.COLOR_HSV2BGR)
+    return boosted
 
     if verbose:
         total = sum(len(v) for v in db.values())

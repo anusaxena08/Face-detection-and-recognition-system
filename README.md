@@ -55,6 +55,45 @@ python src/image_detect.py path\to\image.jpg --output outputs\result.jpg
 - Webcam usage depends on local camera permissions.
 - Haar cascades are fast and lightweight, but may be less accurate than deep learning models.
 
+## Face Recognition
+
+Train and recognize custom faces:
+
+```bash
+# Capture 20 samples of each person
+python src/onboard.py --name "Alice" --webcam --photos 20
+python src/onboard.py --name "Bob" --webcam --photos 20
+
+# Train embeddings
+python src/train.py
+
+# Recognize in real-time
+python src/webcam_detect.py --recognize
+```
+
+See [README details](#recognition-pipeline) below for architecture.
+
+## Hand Gesture Recognition
+
+Train custom hand gestures and trigger actions on recognition:
+
+```bash
+# Capture 20 samples of each gesture
+python src/gesture_onboard.py --gesture "palm" --samples 20
+python src/gesture_onboard.py --gesture "thumbs_up" --samples 20
+
+# Train gesture classifier
+python src/train_gesture.py
+
+# Recognize gestures in real-time
+python src/webcam_detect.py --gesture
+
+# Combine face + gesture recognition
+python src/webcam_detect.py --recognize --gesture
+```
+
+For details see [GESTURE_GUIDE.md](GESTURE_GUIDE.md).
+
 ## Detection Algorithm
 
 This project uses OpenCV's pre-trained `haarcascade_frontalface_default.xml`
@@ -77,3 +116,18 @@ Complexity and trade-offs:
 - Lower `scaleFactor` or `minNeighbors` can increase detections but may add
   false positives or latency.
 - The detector is optimized for frontal faces under reasonable lighting.
+
+## Recognition Pipeline
+
+**Face Recognition Architecture:**
+1. **Detection**: Haar cascade finds candidate face regions
+2. **Validation**: DeepFace with `enforce_detection=True` rejects non-face crops
+3. **Embedding**: Facenet512 generates 512-dim embeddings (rotation/lighting robust)
+4. **Matching**: Cosine similarity to known embeddings with configurable threshold
+5. **Optimization**: Skip-frame recognition (every N frames) + label remapping
+
+**Gesture Recognition Architecture:**
+1. **Detection**: MediaPipe extracts 21 hand landmarks (3D keypoints)
+2. **Features**: Wrist-relative distances (20 features) — rotation-invariant
+3. **Classification**: KNeighborsClassifier (k=3) trained on captured samples
+4. **Confidence**: 1/(1+avg_distance) normalized to [0, 1]

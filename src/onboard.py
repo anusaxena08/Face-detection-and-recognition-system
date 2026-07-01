@@ -26,7 +26,6 @@ from pathlib import Path
 
 import cv2
 
-
 _SUPPORTED = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
 
 

@@ -31,6 +31,9 @@ import numpy as np
 
 from face_detection.detector import Rect
 
+# Keep OpenCV on CPU to avoid OpenCL upload/resource failures during inference.
+cv2.ocl.setUseOpenCL(False)
+
 
 Match = Tuple[Rect, str, float]  # (x, y, w, h), name, similarity
 
@@ -138,10 +141,11 @@ class FaceRecognizer:
             crop = frame[y0:y1, x0:x1]
 
             if crop.size == 0:
-                matches.append((rect, "Unknown", 0.0))
                 continue
 
-            name, score = self._match_crop(_preprocess(crop))
+            name, score, is_face = self._match_crop(_preprocess(crop))
+            if not is_face:
+                continue
             matches.append((rect, name, score))
 
         self._last_matches = matches
@@ -164,13 +168,50 @@ class FaceRecognizer:
             nearest = min(
                 last,
                 key=lambda m: abs((m[0][0] + m[0][2] // 2) - cx)
-                            + abs((m[0][1] + m[0][3] // 2) - cy),
+                + abs((m[0][1] + m[0][3] // 2) - cy),
             )
-            result.append((rect, nearest[1], nearest[2]))
+
+            (px, py, pw, ph), pname, pscore = nearest
+            nearest_cx = px + pw // 2
+            nearest_cy = py + ph // 2
+            center_dist = abs(nearest_cx - cx) + abs(nearest_cy - cy)
+
+            # Reject remap if box moved too far or scale changed too much.
+            max_move = int(max(rect[2], rect[3], pw, ph) * 0.9)
+            size_ratio_w = rect[2] / float(max(1, pw))
+            size_ratio_h = rect[3] / float(max(1, ph))
+            size_ok = 0.5 <= size_ratio_w <= 2.0 and 0.5 <= size_ratio_h <= 2.0
+
+            if center_dist <= max_move and size_ok:
+                result.append((rect, pname, pscore))
         return result
 
-    def _match_crop(self, crop: np.ndarray) -> Tuple[str, float]:
+    def _is_human_face_crop(self, crop: np.ndarray) -> bool:
+        """Return False if the crop does not contain enough human skin tone.
+
+        Uses a lower threshold than the detector (20 %) because the crop is
+        tightly bounded to the face region and has higher skin pixel density.
+        Monkey/animal crops consistently fail this check.
+        """
+        if crop.size == 0:
+            return False
+        ycrcb = cv2.cvtColor(crop, cv2.COLOR_BGR2YCrCb)
+        skin_mask = cv2.inRange(
+            ycrcb,
+            np.array([0, 128, 70], dtype=np.uint8),
+            np.array([255, 185, 140], dtype=np.uint8),
+        )
+        total = crop.shape[0] * crop.shape[1]
+        ratio = float(np.count_nonzero(skin_mask)) / max(1, total)
+        return ratio >= 0.20
+
+    def _match_crop(self, crop: np.ndarray) -> Tuple[str, float, bool]:
         """Embed a validated face crop and find the closest stored encoding."""
+        # Fast species pre-check: reject crops that lack human skin tone.
+        # This stops animal crops that slip past the detector from reaching DeepFace.
+        if not self._is_human_face_crop(crop):
+            return "", 0.0, False
+
         try:
             result = self._deepface.represent(
                 img_path=crop,
@@ -180,11 +221,24 @@ class FaceRecognizer:
             )
             raw = np.array(result[0]["embedding"], dtype=np.float32)
         except Exception:
-            return "Unknown", 0.0
+            # Retry strict validation once on a normalized crop to avoid
+            # "second attempt" misses without allowing non-face objects.
+            try:
+                retry = cv2.resize(crop, (224, 224), interpolation=cv2.INTER_LINEAR)
+                retry = _preprocess(retry)
+                result = self._deepface.represent(
+                    img_path=retry,
+                    model_name=self._model_name,
+                    enforce_detection=True,
+                    detector_backend="opencv",
+                )
+                raw = np.array(result[0]["embedding"], dtype=np.float32)
+            except Exception:
+                return "", 0.0, False
 
         norm = np.linalg.norm(raw)
         if norm == 0:
-            return "Unknown", 0.0
+            return "", 0.0, False
         query = raw / norm
 
         # Cosine similarity against all stored embeddings
@@ -196,10 +250,10 @@ class FaceRecognizer:
                 best_name = name
 
         if best_score < self._threshold:
-            return "Unknown", best_score
+            return "Unknown", best_score, True
 
         # Convert name back from safe_name format (underscores -> spaces)
-        return best_name.replace("_", " "), best_score
+        return best_name.replace("_", " "), best_score, True
 
 
 
