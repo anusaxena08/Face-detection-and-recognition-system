@@ -20,3 +20,6 @@ Thumbs.db
 
 # Project outputs
 outputs/
+known_faces/
+Photos/
+tests/
