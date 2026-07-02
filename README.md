@@ -6,6 +6,9 @@ A simple starter project for face detection using OpenCV and Haar cascades.
 - Detect faces from your webcam in real time.
 - Detect faces in a single image and save the result.
 - Lightweight setup, pure Python.
+- Face recognition for known people, with unrecognized faces labeled as Unknown.
+- Hand gesture recognition including Open Palm, Thumbs Up, Thumbs Down, and Closed Fist.
+- Gesture-driven PPT control (slide up/down and close action) in the live web interface.
 
 ## Project Structure
 
@@ -81,6 +84,8 @@ Train custom hand gestures and trigger actions on recognition:
 # Capture 20 samples of each gesture
 python src/gesture_onboard.py --gesture "palm" --samples 20
 python src/gesture_onboard.py --gesture "thumbs_up" --samples 20
+python src/gesture_onboard.py --gesture "thumbs_down" --samples 20
+python src/gesture_onboard.py --gesture "closed_fist" --samples 20
 
 # Train gesture classifier
 python src/train_gesture.py
@@ -91,6 +96,14 @@ python src/webcam_detect.py --gesture
 # Combine face + gesture recognition
 python src/webcam_detect.py --recognize --gesture
 ```
+
+Supported gesture names: Open Palm, Thumbs Up, Thumbs Down, Closed Fist.
+
+Naming note: runtime labels can appear as `open_palm`, `thumb_up`/`thumbs_up`,
+`thumb_down`/`thumbs_down`, and `closed_fist` depending on model output.
+
+PPT control note: in the live web experience (`src/web_website.py`), Thumbs Up
+and Thumbs Down map to slide navigation, and Closed Fist maps to close action.
 
 For details see [GESTURE_GUIDE.md](GESTURE_GUIDE.md).
 
