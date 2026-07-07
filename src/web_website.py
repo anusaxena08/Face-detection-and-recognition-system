@@ -11,7 +11,8 @@ from typing import List, Optional, Tuple
 import cv2
 import gradio as gr
 import numpy as np
-
+from dotenv import load_dotenv
+load_dotenv()
 try:
     import psutil  # type: ignore
 except ImportError:
@@ -594,21 +595,23 @@ def build_app():
 
 def main() -> None:
     app = build_app()
-    launch_error = None
-    for port in (7860, 7861, 7862, 7863):
-        try:
-            app.launch(
-                server_name="0.0.0.0", server_port=port,
-                inbrowser=True, share=True,
-                allowed_paths=[str(Path.home())],
-            )
-            return
-        except OSError as exc:
-            launch_error = exc
-            continue
 
-    if launch_error is not None:
-        raise launch_error
+    port = int(
+        os.environ.get("PORT")
+        or os.environ.get("WEBSITES_PORT")
+        or os.environ.get("SERVER_PORT")
+        or os.environ.get("GRADIO_SERVER_PORT")
+        or 8000
+    )
+
+    host = os.environ.get("GRADIO_SERVER_NAME", "0.0.0.0")
+
+    app.launch(
+        server_name=host,
+        server_port=port,
+        inbrowser=False,
+        share=False,
+    )
 
 
 if __name__ == "__main__":
