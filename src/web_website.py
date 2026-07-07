@@ -606,12 +606,12 @@ def main() -> None:
 
     host = os.environ.get("GRADIO_SERVER_NAME", "0.0.0.0")
 
-    app.launch(
-        server_name=host,
-        server_port=port,
-        inbrowser=False,
-        share=False,
-    )
+app.launch(
+    server_name=host,
+    server_port=port,
+    inbrowser=False,
+    share=False,
+)
 
 
 if __name__ == "__main__":
