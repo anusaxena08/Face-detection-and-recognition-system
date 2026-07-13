@@ -12,10 +12,9 @@ from __future__ import annotations
 import os
 import sys
 import tempfile
-import threading
 import time
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Optional, Tuple
 
 import cv2
 import numpy as np
@@ -58,6 +57,7 @@ def _init_session_state():
         "last_nav_time": 0.0,
         "opened_file_path": None,
         "opened_pids": set(),
+        "last_voice_status": "",
         "pipeline": None,
         "gesture_recognizer": None,
         "gesture_init_attempted": False,
@@ -203,6 +203,49 @@ def _close_opened_file() -> str:
     return "No tracked file to close (open a file first with Open Palm)."
 
 
+def _open_file_from_audio_input(audio_value) -> str:
+    """Save recorded audio to a temp file, then open the requested document."""
+    if audio_value is None:
+        return "No audio received. Record a command and try again."
+
+    audio_name = getattr(audio_value, "name", "voice-command.wav")
+    suffix = Path(audio_name).suffix or ".wav"
+
+    if hasattr(audio_value, "getvalue"):
+        audio_bytes = audio_value.getvalue()
+    else:
+        audio_bytes = bytes(audio_value)
+
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+    try:
+        tmp.write(audio_bytes)
+        tmp.close()
+
+        before_pids: set[int] = set()
+        if psutil is not None:
+            try:
+                before_pids = set(psutil.pids())
+            except Exception:
+                pass
+
+        status, opened_path = open_file_by_voice(tmp.name)
+        if opened_path:
+            st.session_state.opened_file_path = opened_path
+            if psutil is not None:
+                time.sleep(2.0)
+                try:
+                    st.session_state.opened_pids = set(psutil.pids()) - before_pids
+                except Exception:
+                    st.session_state.opened_pids = set()
+
+        return status
+    finally:
+        try:
+            os.unlink(tmp.name)
+        except OSError:
+            pass
+
+
 # --- File Upload Processing ---------------------------------------------------
 def _is_video(path: Path) -> bool:
     return path.suffix.lower() in {".mp4", ".avi", ".mov", ".mkv", ".webm"}
@@ -325,7 +368,7 @@ def main():
             st.markdown("""
 | Gesture | Action |
 |---|---|
-| ✋ Open Palm | Voice file opener activates |
+| ✋ Open Palm | Use the voice recorder below to open a file |
 | 👍 Thumb Up | Page Up (slide navigation) |
 | 👎 Thumb Down | Page Down (slide navigation) |
 | ✊ Closed Fist | Close the currently open file |
@@ -336,6 +379,35 @@ def main():
                 "- *\"Downloads presentation slides\"*\n\n"
                 "Recognised folders: **Desktop · Documents · Downloads · Pictures · Videos**"
             )
+
+        st.markdown("### 🎤 Voice File Opener")
+        st.caption("Show **Open Palm**, then record a command like `Documents quarterly report ppt`.")
+
+        recorded_audio = None
+        fallback_audio = None
+        if hasattr(st, "audio_input"):
+            recorded_audio = st.audio_input("Record folder name first, then file name")
+        else:
+            st.warning("This Streamlit version does not support in-browser recording. Upload a short audio clip instead.")
+            fallback_audio = st.file_uploader(
+                "Upload recorded audio",
+                type=["wav", "mp3", "m4a", "ogg"],
+                key="voice_audio_upload",
+            )
+
+        if st.button("Open file by voice", key="open_file_by_voice"):
+            audio_source = recorded_audio if recorded_audio is not None else fallback_audio
+            if audio_source is None:
+                st.session_state.last_voice_status = "Record audio first, then click 'Open file by voice'."
+            else:
+                with st.spinner("Processing voice command..."):
+                    st.session_state.last_voice_status = _open_file_from_audio_input(audio_source)
+
+        if st.session_state.last_voice_status:
+            if st.session_state.last_voice_status.startswith("✅"):
+                st.success(st.session_state.last_voice_status)
+            else:
+                st.info(st.session_state.last_voice_status)
 
         # Webcam display area
         frame_placeholder = st.empty()
