@@ -1,20 +1,46 @@
 # Python Face Detection Project
 
-A simple starter project for face detection using OpenCV and Haar cascades.
+A face detection and recognition system with hand gesture controls, built with OpenCV, DeepFace, MediaPipe, and Streamlit.
 
 ## Features
 - Detect faces from your webcam in real time.
 - Detect faces in a single image and save the result.
-- Lightweight setup, pure Python.
 - Face recognition for known people, with unrecognized faces labeled as Unknown.
 - Hand gesture recognition including Open Palm, Thumbs Up, Thumbs Down, and Closed Fist.
 - Gesture-driven PPT control (slide up/down and close action) in the live web interface.
+- Streamlit-based web UI for all features.
 
 ## Project Structure
 
-- `src/webcam_detect.py`: real-time webcam face detection.
-- `src/image_detect.py`: image file face detection.
-- `src/face_detection/detector.py`: reusable detector logic.
+```
+├── backend/                    # All ML and detection logic
+│   ├── __init__.py
+│   ├── face_detection/         # Face detection & recognition modules
+│   │   ├── detector.py         # Haar cascade face detector
+│   │   ├── recognizer.py       # DeepFace-based face recognizer
+│   │   └── trainer.py          # Training script for face encodings
+│   ├── hand_gesture/           # Hand gesture modules
+│   │   ├── detector.py         # Skin-color hand detector
+│   │   ├── recognizer.py       # KNN gesture classifier
+│   │   ├── mp_recognizer.py    # MediaPipe gesture recognizer
+│   │   ├── trainer.py          # Gesture model trainer
+│   │   └── voice_file_opener.py # Voice-based file opener
+│   ├── webcam_detect.py        # CLI webcam detection
+│   ├── image_detect.py         # CLI image detection
+│   ├── onboard.py              # Face onboarding (capture photos)
+│   ├── gesture_onboard.py      # Gesture onboarding (capture samples)
+│   ├── train.py                # Face training entry point
+│   ├── train_gesture.py        # Gesture training entry point
+│   ├── bootstrap_internet_gesture_data.py
+│   └── import_palm_images.py
+├── frontend/                   # Streamlit web application
+│   └── app.py                  # Main Streamlit entry point
+├── tests/                      # Test files
+├── models/                     # Trained model files
+├── known_faces/                # Labeled face images for training
+├── gesture_data/               # Gesture training data
+└── requirements.txt
+```
 
 ## Setup
 
@@ -38,20 +64,26 @@ pip install -r requirements.txt
 
 ## Run
 
-### Webcam detection
+### Web Interface (Streamlit)
 
 ```powershell
-$env:PYTHONPATH = "src"
-python src/webcam_detect.py --camera 0
+streamlit run frontend/app.py
+```
+
+This launches the full web UI with webcam, gesture controls, and file upload tabs.
+
+### CLI: Webcam detection
+
+```powershell
+python -m backend.webcam_detect --camera 0
 ```
 
 Press `q` to quit.
 
-### Image detection
+### CLI: Image detection
 
 ```powershell
-$env:PYTHONPATH = "src"
-python src/image_detect.py path\to\image.jpg --output outputs\result.jpg
+python -m backend.image_detect path\to\image.jpg --output outputs\result.jpg
 ```
 
 ## Notes
@@ -64,17 +96,17 @@ Train and recognize custom faces:
 
 ```bash
 # Capture 20 samples of each person
-python src/onboard.py --name "Alice" --webcam --photos 20
-python src/onboard.py --name "Bob" --webcam --photos 20
+python -m backend.onboard --name "Alice" --webcam --photos 20
+python -m backend.onboard --name "Bob" --webcam --photos 20
 
 # Train embeddings
-python src/train.py
+python -m backend.train
 
 # Recognize in real-time
-python src/webcam_detect.py --recognize
+python -m backend.webcam_detect --recognize
 ```
 
-See [README details](#recognition-pipeline) below for architecture.
+See [Recognition Pipeline](#recognition-pipeline) below for architecture.
 
 ## Hand Gesture Recognition
 
@@ -82,19 +114,19 @@ Train custom hand gestures and trigger actions on recognition:
 
 ```bash
 # Capture 20 samples of each gesture
-python src/gesture_onboard.py --gesture "palm" --samples 20
-python src/gesture_onboard.py --gesture "thumbs_up" --samples 20
-python src/gesture_onboard.py --gesture "thumbs_down" --samples 20
-python src/gesture_onboard.py --gesture "closed_fist" --samples 20
+python -m backend.gesture_onboard --gesture "palm" --samples 20
+python -m backend.gesture_onboard --gesture "thumbs_up" --samples 20
+python -m backend.gesture_onboard --gesture "thumbs_down" --samples 20
+python -m backend.gesture_onboard --gesture "closed_fist" --samples 20
 
 # Train gesture classifier
-python src/train_gesture.py
+python -m backend.train_gesture
 
 # Recognize gestures in real-time
-python src/webcam_detect.py --gesture
+python -m backend.webcam_detect --gesture
 
 # Combine face + gesture recognition
-python src/webcam_detect.py --recognize --gesture
+python -m backend.webcam_detect --recognize --gesture
 ```
 
 Supported gesture names: Open Palm, Thumbs Up, Thumbs Down, Closed Fist.
@@ -102,7 +134,7 @@ Supported gesture names: Open Palm, Thumbs Up, Thumbs Down, Closed Fist.
 Naming note: runtime labels can appear as `open_palm`, `thumb_up`/`thumbs_up`,
 `thumb_down`/`thumbs_down`, and `closed_fist` depending on model output.
 
-PPT control note: in the live web experience (`src/web_website.py`), Thumbs Up
+PPT control note: in the Streamlit web app (`frontend/app.py`), Thumbs Up
 and Thumbs Down map to slide navigation, and Closed Fist maps to close action.
 
 For details see [GESTURE_GUIDE.md](GESTURE_GUIDE.md).
