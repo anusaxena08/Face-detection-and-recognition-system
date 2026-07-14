@@ -37,6 +37,16 @@ class FaceDetector:
     """
 
     def __init__(self, scale_factor: float = 1.1, min_neighbors: int = 5) -> None:
+        if not hasattr(cv2, "CascadeClassifier"):
+            version = getattr(cv2, "__version__", "unknown")
+            cv2_path = getattr(cv2, "__file__", "unknown")
+            raise RuntimeError(
+                "The active OpenCV build does not provide CascadeClassifier. "
+                "This project requires a stable 4.x opencv-python/opencv-python-headless build. "
+                f"Detected cv2 version={version} from {cv2_path}. "
+                "Remove conflicting OpenCV 5 packages and reinstall requirements."
+            )
+
         cascade_path = Path(cv2.data.haarcascades) / "haarcascade_frontalface_default.xml"
         self._classifier = cv2.CascadeClassifier(str(cascade_path))
         if self._classifier.empty():

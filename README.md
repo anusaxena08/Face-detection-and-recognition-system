@@ -72,6 +72,22 @@ streamlit run frontend/app.py
 
 This launches the full web UI with webcam, gesture controls, and file upload tabs.
 
+### Frontend + Backend Locally
+
+Run both services together on Windows:
+
+```powershell
+.\start-services.ps1
+```
+
+Endpoints:
+- Frontend: `http://localhost:8501`
+- Backend API: `http://localhost:8000`
+- Backend health check: `http://localhost:8000/health`
+
+The backend API accepts image uploads at `POST /detect` using multipart form-data
+with the file field name `file`.
+
 ### CLI: Webcam detection
 
 ```powershell
